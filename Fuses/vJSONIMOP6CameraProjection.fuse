@@ -1,0 +1,469 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONIMOP6CameraProjection"
+DATATYPE = "Text"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\IMOP6",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Transforms arrays using perspective, stereographic, or orthographic projection with clipping and shearing.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.Camera3D",
+})
+
+
+    local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+  <td style="text-align: center; padding: 5px;">[vJSON - XYZ ] →</td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[]] ..
+        FUSE_NAME .. [[]</td>
+    <td style="text-align: center; padding: 5px;">→ [vJSONShapeRender]</td>
+  </tr>
+</table>
+]]
+
+function Create()
+    -- [[ Creates the user interface. ]]
+    InConnectionLabel = self:AddInput(ConnectionLabel, "ConnectionLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    self:BeginControlNest("Translation", "Translation", true, { LBLC_PickButton = false })
+
+    TranslateX = self:AddInput("X Offset", "Translate.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+    })
+
+    TranslateY = self:AddInput("Y Offset", "Translate.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+    })
+
+    TranslateZ = self:AddInput("Z Offset", "Translate.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1.0,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Rotation", "Rotation", true, { LBLC_PickButton = false })
+    InRotOrder = self:AddInput("Rotation Order", "RotOrder", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0,
+        { MBTNC_AddButton = " XYZ ", },
+        { MBTNC_AddButton = " XZY ", },
+        { MBTNC_AddButton = " YXZ ", },
+        { MBTNC_AddButton = " YZX ", },
+        { MBTNC_AddButton = " ZXY ", },
+        { MBTNC_AddButton = " ZYX ", },
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    RotateX = self:AddInput("X Rotation", "Rotate.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_MaxScale = 360.0,
+        IC_Steps = 1,
+    })
+
+    RotateY = self:AddInput("Y Rotation", "Rotate.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_MaxScale = 360.0,
+        IC_Steps = 1,
+    })
+
+    RotateZ = self:AddInput("Z Rotation", "Rotate.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_MaxScale = 360.0,
+    })
+
+    self:EndControlNest()
+
+    self:BeginControlNest("Scale", "Scale", true, { LBLC_PickButton = false })
+    InLockScale = self:AddInput("Lock X/Y", "LockXY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+        INP_DoNotifyChanged = true,
+    })
+
+    ScaleX = self:AddInput("X Scale", "Scale.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1.0,
+    })
+
+    ScaleY = self:AddInput("Y Scale", "Scale.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1.0,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Shear", "Shear", true, { LBLC_PickButton = false })
+    ShearX = self:AddInput("X Shear", "Shear.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 0.0,
+    })
+
+    ShearY = self:AddInput("Y Shear", "Shear.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 0.0,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Projection Settings", "projection_settings", true, {
+        LBLC_PickButton = false,
+    })
+
+    InProjType = self:AddInput("Projection Type", "ProjectionType", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0,
+        INP_DoNotifyChanged = true,
+        { MBTNC_AddButton = "Perspective", },
+        { MBTNC_AddButton = "Stereographic", },
+        { MBTNC_AddButton = "Orthographic", },
+    })
+
+    InFov = self:AddInput("Field of view", "fov", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Integer = false,
+        INP_Default = 90.0,
+    })
+
+    InOrthoScale = self:AddInput("Ortho Scale", "OrthoScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1.0,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InNear = self:AddInput("Near clipping plane", "near", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 0.1,
+    })
+
+    InFar = self:AddInput("Far clipping plane", "far", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1000.0,
+    })
+
+    InAspect_ratio = self:AddInput("Screen aspect ratio", "aspect_ratio", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 16 / 9,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    self:EndControlNest()
+
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+    InArray = self:AddInput("Array A", "ArrayA", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        LINK_Main = 1,
+    })
+
+    OutData = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InLockScale then
+        if param.Value > 0.5 then
+            ScaleX:SetAttrs({ LINKS_Name = "Scale" })
+            ScaleY:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        else
+            ScaleX:SetAttrs({ LINKS_Name = "X Scale" })
+            ScaleY:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        end
+    elseif inp == InProjType then
+        if param.Value > 1.5 then
+            -- Orthographic selected: hide FOV, show Ortho Scale
+            InFov:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InOrthoScale:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            -- Perspective or Stereographic selected: show FOV, hide Ortho Scale
+            InFov:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InOrthoScale:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
+end
+
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+    -- [[ Creates the output. ]]
+    
+    local arrayA = jsonutils.decode(InArray:GetValue(req).Value)
+
+    local _translateX = TranslateX:GetValue(req).Value
+    local _translateY = TranslateY:GetValue(req).Value
+    local _translateZ = TranslateZ:GetValue(req).Value
+
+    local _rotationZ = RotateZ:GetValue(req).Value
+    local _rotationX = RotateX:GetValue(req).Value
+    local _rotationY = RotateY:GetValue(req).Value
+
+    local _scaleX = ScaleX:GetValue(req).Value
+    local _scaleY = _scaleX
+
+    local _shearX = ShearX:GetValue(req).Value
+    local _shearY = ShearY:GetValue(req).Value
+
+    if InLockScale:GetValue(req).Value < 0.5 then
+        _scaleX = ScaleX:GetValue(req).Value
+        _scaleY = ScaleY:GetValue(req).Value
+    end
+
+    local proj_type = InProjType:GetValue(req).Value
+    local fov = InFov:GetValue(req).Value
+    local ortho_scale = InOrthoScale:GetValue(req).Value
+    local aspect_ratio = InAspect_ratio:GetValue(req).Value
+    local near = math.max(0.0001, InNear:GetValue(req).Value)
+    local far = InFar:GetValue(req).Value
+
+    -- Blank image
+    local imgattrs = {
+        IMG_Document = self.Comp,
+        IMAT_OriginalWidth = 0,
+        IMAT_OriginalHeight = 0,
+    }
+    local out = Image(imgattrs)
+
+    -- Function to scale array points in local space
+    function scale_array(array, sx, sy)
+        local scaled = {}
+        for i = 1, #array do
+            local x = (array[i][1] or 0) * sx
+            local y = (array[i][2] or 0) * sy
+            local z = (array[i][3] or 0)
+            scaled[i] = { x, y, z }
+        end
+        return scaled
+    end
+
+    -- Function to shear array points in local space
+    function shear_array(array, shx, shy)
+        local sheared = {}
+        for i = 1, #array do
+            local x = array[i][1] or 0
+            local y = array[i][2] or 0
+            local z = array[i][3] or 0
+            local new_x = x + shx * y
+            local new_y = y + shy * x
+            sheared[i] = { new_x, new_y, z }
+        end
+        return sheared
+    end
+
+    -- ========================= Rotation Setup =================================
+
+    function rotation_matrix_XYZ(angles)
+        local cos_x, sin_x = math.cos(angles[1]), math.sin(angles[1])
+        local cos_y, sin_y = math.cos(angles[2]), math.sin(angles[2])
+        local cos_z, sin_z = math.cos(angles[3]), math.sin(angles[3])
+
+        local rotation_x = {
+            { 1, 0,     0,      0 },
+            { 0, cos_x, -sin_x, 0 },
+            { 0, sin_x, cos_x,  0 },
+            { 0, 0,     0,      1 }
+        }
+
+        local rotation_y = {
+            { cos_y,  0, sin_y, 0 },
+            { 0,      1, 0,     0 },
+            { -sin_y, 0, cos_y, 0 },
+            { 0,      0, 0,     1 }
+        }
+
+        local rotation_z = {
+            { cos_z, -sin_z, 0, 0 },
+            { sin_z, cos_z,  0, 0 },
+            { 0,     0,      1, 0 },
+            { 0,     0,      0, 1 }
+        }
+
+        local function matrix_multiply_rot(a, b)
+            local result = {}
+            for i = 1, 4 do
+                result[i] = {}
+                for j = 1, 4 do
+                    result[i][j] = 0
+                    for k = 1, 4 do
+                        result[i][j] = result[i][j] + a[i][k] * b[k][j]
+                    end
+                end
+            end
+            return result
+        end
+
+        local rotation_xy = matrix_multiply_rot(rotation_x, rotation_y)
+        local rotation_xyz = matrix_multiply_rot(rotation_xy, rotation_z)
+
+        return rotation_xyz
+    end
+
+    function matrix_multiply(m1, m2)
+        local result = {}
+        for i = 1, #m1 do
+            result[i] = {}
+        end
+
+        for i = 1, #m1 do
+            for j = 1, #m2[1] do
+                local sum = 0
+                for k = 1, #m1[i] do
+                    sum = sum + m1[i][k] * m2[k][j]
+                end
+                result[i][j] = sum
+            end
+        end
+        return result
+    end
+
+    -- ============================================================================
+
+    -- Function to translate, check clipping, and project coordinates to 2D screen space
+    function transform_and_project(array, translateX, translateY, translateZ, fov, ortho_scale, aspect_ratio, near,
+                                   far, img, proj_type)
+        local result = {}
+
+        local function project(x, y, z)
+            -- Clamp Z depth to near plane to prevent division by zero / extreme explosions
+            local safe_z = z
+            if safe_z < near then safe_z = near end
+            if safe_z > far then safe_z = far end
+
+            local scale = 1 / math.tan(fov * 0.5 * math.pi / 180)
+            local screen_x, screen_y
+
+            if proj_type == 2 then
+                -- Orthographic Projection
+                screen_x = (aspect_ratio * ortho_scale) * x
+                screen_y = ortho_scale * y
+            elseif proj_type == 1 then
+                -- Stereographic Projection
+                local r = math.sqrt(x * x + y * y + safe_z * safe_z)
+                local denom = r + safe_z
+                if math.abs(denom) < 0.00001 then denom = 0.00001 end
+                screen_x = (aspect_ratio * scale) * (2 * x) / denom
+                screen_y = scale * (2 * y) / denom
+            else
+                -- Standard Perspective Projection
+                screen_x = (aspect_ratio * scale) * x / safe_z
+                screen_y = scale * y / safe_z
+            end
+
+            return screen_x, screen_y
+        end
+
+        for i = 1, #array do
+            local x = (array[i][1] or 0) + translateX
+            local y = (array[i][2] or 0) + translateY
+            local z = (array[i][3] or 0) + translateZ
+
+            local screen_x, screen_y = project(x, y, z)
+
+            -- Normalize the coordinates
+            local normalized_x = (screen_x / (aspect_ratio * 2)) + 0.5
+            local normalized_y = (screen_y / 2) + convertY(0.5, img)
+
+            table.insert(result, { normalized_x, normalized_y })
+        end
+
+        return result
+    end
+
+    -- ================================================================================
+
+    -- Apply rotation to the array
+    function rotate_array(array, rotation_matrix)
+        local rotated_array = {}
+        for i = 1, #array do
+            local vector = { array[i][1], array[i][2], array[i][3] }
+            local result = matrix_multiply({ vector }, rotation_matrix)
+            rotated_array[i] = { result[1][1], result[1][2], result[1][3] }
+        end
+
+        return rotated_array
+    end
+
+    -- ================================================================================
+
+    -- Transformation Order: Scale -> Shear -> Rotate -> Translate & Project
+    local angles            = { math.rad(_rotationX), math.rad(_rotationY), math.rad(_rotationZ) }
+    local rotation          = rotation_matrix_XYZ(angles)
+
+    local scaled_array      = scale_array(arrayA, _scaleX, _scaleY)
+    local sheared_array     = shear_array(scaled_array, _shearX, _shearY)
+    local rotated_array     = rotate_array(sheared_array, rotation)
+    local _transform_result = transform_and_project(rotated_array, _translateX, _translateY, _translateZ,
+        fov, ortho_scale, aspect_ratio, near, far, out, proj_type)
+
+    local json_str_out      = jsonutils.encode(_transform_result)
+
+    OutData:Set(req, Text(json_str_out))
+end

@@ -1,0 +1,248 @@
+-- ============================================================================
+-- Modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+
+-- ============================================================================
+-- Constants & Registration
+-- ============================================================================
+FUSE_NAME = "vJSONIMOP6ShapeRender_GPU"
+DATATYPE = "Image"
+
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\IMOP6",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "GPU Accelerated Polygon Dot Shapes from JSON Point Data.",
+    REGS_OpIconString = "GPU",
+    REG_Version = 200,
+})
+
+-- ============================================================================
+-- 1. Kernel Struct Parameters (Uses float arrays for C/FFI safety)
+-- ============================================================================
+RenderParams = [[
+    int num_points;
+    float dot_radius;
+    float dot_sides;
+    float dot_color[4];
+    int dstsize[2];
+]]
+
+-- ============================================================================
+-- 2. DVIP Kernel Code (Cross-platform CUDA/Metal/OpenCL)
+-- ============================================================================
+RenderKernelSource = [[
+#define PI 3.14159265359f
+
+__KERNEL__ void DotRenderKernel(
+    __CONSTANTREF__ RenderParams *params,
+    __TEXTURE2D__ points_img,
+    __TEXTURE2D_WRITE__ dst)
+{
+    DEFINE_KERNEL_ITERATORS_XY(x, y)
+    
+    if (x < params->dstsize[0] && y < params->dstsize[1])
+    {
+        // Screen space UVs (0.0 to 1.0)
+        float2 uv = to_float2((float)x, (float)y) / to_float2((float)(params->dstsize[0] - 1), (float)(params->dstsize[1] - 1));
+        float aspect = (float)params->dstsize[0] / (float)params->dstsize[1];
+        
+        // Correct Y aspect ratio
+        uv.y /= aspect;
+
+        float alpha_accum = 0.0f;
+        float radius = params->dot_radius;
+        float sides = params->dot_sides;
+
+        // Iterate over all points supplied by the data texture
+        for (int i = 0; i < params->num_points; i++) 
+        {
+            float4 pt_data = _tex2DVecN(points_img, (float)i + 0.5f, 0.5f, 15);
+            float2 pt = to_float2(pt_data.x, pt_data.y);
+
+            float2 d = uv - pt;
+            float dist = _sqrtf(d.x * d.x + d.y * d.y);
+
+            if (dist < radius * 2.0f) 
+            {
+                // Regular Polygon SDF
+                float angle = atan2f(d.y, d.x);
+                float slice = (2.0f * PI) / sides;
+                float poly_dist = dist * cosf(fmod(angle + PI, slice) - slice * 0.5f);
+
+                // Anti-Aliased Edge
+                float edge_width = 0.0005f;
+                float lower = radius - edge_width;
+                float upper = radius + edge_width;
+                
+                float t = fmax(0.0f, fmin(1.0f, (poly_dist - lower) / (upper - lower)));
+                float pt_alpha = 1.0f - (t * t * (3.0f - 2.0f * t)); // Smoothstep
+
+                // Combine shape alphas
+                alpha_accum = fmax(alpha_accum, pt_alpha);
+            }
+        }
+
+        // Color & Premultiplied Alpha
+        float r = params->dot_color[0];
+        float g = params->dot_color[1];
+        float b = params->dot_color[2];
+        float a = params->dot_color[3];
+
+        float4 final_color = to_float4(
+            r * alpha_accum * a,
+            g * alpha_accum * a,
+            b * alpha_accum * a,
+            alpha_accum * a
+        );
+
+        _tex2DVec4Write(dst, x, y, final_color);
+    }
+}
+]]
+
+-- ============================================================================
+-- Create Controls
+-- ============================================================================
+function Create()
+    InShowDots = self:AddInput("Show Dots", "showdots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+    })
+    
+    InDotSides = self:AddInput("Dot Sides", "dotSides", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = true,
+        INP_MinScale = 3,
+        INP_MinAllowed = 3,
+        INP_MaxScale = 12,
+        INP_Default = 6,
+    })
+
+    InDotRadius = self:AddInput("Dot Radius", "dotRadius", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale = 0.1,
+        INP_MinAllowed = 0.001,
+        INP_Default = 0.01,
+    })
+
+    InDot_R = self:AddInput("Red", "Red_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 0,
+    })
+    InDot_G = self:AddInput("Green", "Green_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 1,
+    })
+    InDot_B = self:AddInput("Blue", "Blue_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.5,
+        IC_ControlGroup = 1,
+        IC_ControlID = 2,
+    })
+    InDot_A = self:AddInput("Alpha", "Alpha_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+    })
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+
+    InPoint = self:AddInput("JSON Point", "JSONPoint", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 2,
+    })
+
+    Output = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+-- ============================================================================
+-- Process
+-- ============================================================================
+function Process(req)
+    local img = InImage:GetValue(req)
+    if not img then return end
+
+    local out = Image({IMG_Like = img, IMG_Clear = true})
+    local array_str_point = InPoint:GetValue(req).Value
+
+    -- Decode JSON Point string
+    local tbl = {}
+    if array_str_point and array_str_point ~= "" then
+        tbl = jsonutils and jsonutils.decode(array_str_point) or {}
+    end
+
+    local num_points = #tbl
+    if num_points == 0 then
+        tbl = { {0.5, 0.5} }
+        num_points = 1
+    end
+
+    -- Create point coordinate texture
+    local points_img = Image({
+        IMG_Width = num_points,
+        IMG_Height = 1,
+        IMG_Depth = 8,
+        IMG_DeferAlloc = false
+    })
+
+    local p = Pixel()
+    for i = 1, num_points do
+        p.R = tbl[i][1] or 0.5
+        p.G = tbl[i][2] or 0.5
+        p.B = 0.0
+        p.A = 1.0
+        points_img:SetPixel(i - 1, 0, p)
+    end
+
+    -- DVIP GPU Session
+    local node = DVIPComputeNode(req, "DotRenderKernel", RenderKernelSource, "RenderParams", RenderParams)
+
+    if node then
+        local params = node:GetParamBlock(RenderParams)
+
+        params.num_points = num_points
+        params.dot_radius = InDotRadius:GetValue(req).Value
+        params.dot_sides = InDotSides:GetValue(req).Value
+        params.dot_color[0] = InDot_R:GetValue(req).Value
+        params.dot_color[1] = InDot_G:GetValue(req).Value
+        params.dot_color[2] = InDot_B:GetValue(req).Value
+        params.dot_color[3] = InDot_A:GetValue(req).Value
+        params.dstsize[0] = out.DataWindow:Width()
+        params.dstsize[1] = out.DataWindow:Height()
+
+        node:SetParamBlock(params)
+
+        node:AddSampler("DataSampler", TEX_FILTER_MODE_NEAREST, TEX_ADDRESS_MODE_CLAMP, TEX_NORMALIZED_COORDS_FALSE)
+        node:AddInput("points_img", points_img)
+        node:AddOutput("dst", out)
+
+        local ok = node:RunSession(req)
+        if not ok then out = nil end
+    end
+
+    Output:Set(req, out)
+end

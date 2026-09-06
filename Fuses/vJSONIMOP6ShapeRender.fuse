@@ -1,0 +1,1230 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONIMOP6ShapeRender"
+DATATYPE = "Image"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\IMOP6",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Create a polygon dot shapes from a JSON based Lua table of XY point pairs.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.sRender",
+    REG_Version = 101,
+})
+function Create()
+    -- [[ Creates the user interface. ]]
+    InSeparator_1 = self:AddInput("Separator_1", "Separator_1", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = false,
+    })
+    InUnConnectLines = self:AddInput("Use Edge Data", "unconnectlines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InUseCurvatureData = self:AddInput("Use Curvature Data", "UseCurvatureData", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowLines = self:AddInput("Show Lines", "showlines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowDots = self:AddInput("Show Dots", "showdots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 1,
+        ICD_Width = 1,
+    })
+    InShowCustom = self:AddInput("Show Custom", "showcustom_shapes", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InLineWidth = self:AddInput("Line Width", "lineWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.001,
+    })
+    InDotLineWidth = self:AddInput("Dot Line Width", "DotlineWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.001,
+    })
+    self:BeginControlNest("Line Settings", "LineSettings", false, {})
+    InConnectGroups = self:AddInput("Connect Text Groups", "connectgroups", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InRenderOutline = self:AddInput("Render Outline Lines", "Outline_lines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+        ICD_Width = 1,
+    })
+    InSeparator_2 = self:AddInput("Separator_2", "Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = true,
+    })
+    InLine_R = self:AddInput("Red", "Red_line", {
+        ICS_Name = "Line Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 1,
+        IC_ControlID = 0,
+    })
+    InLine_G = self:AddInput("Green", "Green_line", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1,
+        IC_ControlGroup = 1,
+        IC_ControlID = 1,
+    })
+    InLine_B = self:AddInput("Blue", "Blue_line", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1,
+        IC_ControlGroup = 1,
+        IC_ControlID = 2,
+    })
+    InLine_A = self:AddInput("Alpha", "Alpha_line", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Curvature Settings", "CurvatureSettings", false, {})
+    InCurveDataBlend = self:AddInput("Curve Data Blend", "CurveDataBlend", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1,
+        INP_Default = 1,
+    })
+
+    InCurveAmount = self:AddInput("Multigraph Curvature", "MultiCurve", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MaxScale = 1,
+        INP_Default = 0.5,
+    })
+
+    InCurveSteps = self:AddInput("Curve Resolution", "CurveSteps", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Integer = true,
+        INP_MinAllowed = 2,
+        INP_MaxScale = 64,
+        INP_Default = 16,
+    })
+
+    InCurveBias = self:AddInput("Curve Bias", "CurveBias", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -2.0,
+        INP_MaxScale = 2.0,
+    })
+
+    InThicknessFactor = self:AddInput("Double Style Thickness Factor", "ThicknessFactor", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 3.0,
+        INP_MinScale = 1.0,
+        INP_MaxScale = 10.0,
+    })
+
+    InCurveJitter = self:AddInput("Curve Jitter", "CurveJitter", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 2.0,
+        INP_Default = 0.0,
+    })
+        
+    InSmoothSeed = self:AddInput("Smooth Seed", "SmoothSeed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 10.0,
+        INP_Default = 0.0,
+    })
+        
+    InNoiseScale = self:AddInput("Noise Scale", "NoiseScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.01,
+        INP_MaxScale = 10.0,
+        INP_Default = 1.0,
+        INP_MinAllowed = 0.001,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Dot Settings", "DotSettings", false, {})
+    InHideDots = self:AddInput("Hide Default Dots", "hidedots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InOutlineDots = self:AddInput("Render Outline Dots", "outlinedots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InDotSides = self:AddInput("Dot Sides", "dotSides", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = true,
+        INP_MinScale = 3,
+        INP_MinAllowed = 3,
+        INP_MaxScale = 10,
+        INP_Default = 6,
+    })
+    InDotRadius = self:AddInput("Dot Radius", "dotRadius", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale = 0.1,
+        INP_MinScale = 0.0,
+        INP_MinAllowed = 0.0,
+        INP_Default = 0.01,
+    })
+    InDotsScale = self:AddInput("Dots Scale", "DotsScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+    })
+    InSeparator_3 = self:AddInput("Separator_3", "Separator_3", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = true,
+    })
+    InUseColor_Dot = self:AddInput("Color", "color_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        {
+            MBTNC_AddButton = "Default",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        {
+            MBTNC_AddButton = "Custom",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        INP_DoNotifyChanged = true,
+    })
+    InDot_R = self:AddInput("Red", "Red_dot", {
+        ICS_Name = "Dot Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 2,
+        IC_ControlID = 0,
+    })
+    InDot_G = self:AddInput("Green", "Green_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.0,
+        IC_ControlGroup = 2,
+        IC_ControlID = 1,
+    })
+    InDot_B = self:AddInput("Blue", "Blue_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.5,
+        IC_ControlGroup = 2,
+        IC_ControlID = 2,
+    })
+    InDot_A = self:AddInput("Alpha", "Alpha_dot", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 2,
+        IC_ControlID = 3,
+    })
+    self:EndControlNest()
+    self:BeginControlNest("Custom Shape Settings", "CustomSettings", false, {})
+    InRenderCustomOutline = self:AddInput("Render Outline Shape", "Custom_Outline", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InRenderCustomOutline_BG = self:AddInput("Render Outline Background", "Custom_Outline_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+        ICD_Width = 1,
+    })
+    InShowCustomOutline_BG = self:AddInput("Show / Hide Background", "hideOutline_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+    InCustomLineWidth = self:AddInput("Shape Outline", "CustomlineWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.002,
+    })
+    InCustomLineWidth_BG = self:AddInput("Background Outline", "CustomlineWidth_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.002,
+    })
+    Inline2Separator = self:AddInput("line2Separator", "line2Separator", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InCustomScale = self:AddInput("Shape Scale", "customScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+    })
+    Inline3Separator = self:AddInput("line3Separator", "line3Separator", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InUseColor_Shape = self:AddInput("Color", "color_Cshape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        {
+            MBTNC_AddButton = "Default",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        {
+            MBTNC_AddButton = "Custom",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        INP_DoNotifyChanged = true,
+    })
+    InShape_R = self:AddInput("Red", "Red_Shape", {
+        ICS_Name = "Shape Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 4,
+        IC_ControlID = 0,
+    })
+    InShape_G = self:AddInput("Green", "Green_Shape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.9,
+        IC_ControlGroup = 4,
+        IC_ControlID = 1,
+    })
+    InShape_B = self:AddInput("Blue", "Blue_Shape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.6,
+        IC_ControlGroup = 4,
+        IC_ControlID = 2,
+    })
+    InShape_A = self:AddInput("Alpha", "Alph_Shape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 4,
+        IC_ControlID = 3,
+    })
+    InSeparator_8 = self:AddInput("Separator_8", "Separator_8", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = false,
+    })
+    InShape_BG_R = self:AddInput("Red", "Red_Shape_BG", {
+        ICS_Name = "Background Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.079,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 5,
+        IC_ControlID = 0,
+    })
+    InShape_BG_G = self:AddInput("Green", "Green_Shape_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.079,
+        IC_ControlGroup = 5,
+        IC_ControlID = 1,
+    })
+    InShape_BG_B = self:AddInput("Blue", "Blue_Shape_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.079,
+        IC_ControlGroup = 5,
+        IC_ControlID = 2,
+    })
+    InShape_BG_A = self:AddInput("Alpha", "Alph_Shape_BG", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 5,
+        IC_ControlID = 3,
+    })
+    self:EndControlNest()
+    self:BeginControlNest("Style Settings", "stylesettings", false, {})
+    InFilter = self:AddInput("Filter", "Filter", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 3.0,
+        {
+            MBTNC_AddButton = "Box",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton = "Bartlett",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton = "Multi-box",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton = "Gaussian",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+    InSoftEdge = self:AddInput("Soft Edge", "SoftEdge", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 50,
+        INP_Default = 0,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+    InLineType = self:AddInput("Line Type", "LineType", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        {
+            MBTNC_AddButton = "Solid",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton = "Dash",
+            MBTNCD_ButtonWidth = 0.34,
+        },
+        {
+            MBTNC_AddButton = "Dot",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton = "Dash Dot",
+            MBTNCD_ButtonWidth = 0.5,
+        },
+        {
+            MBTNC_AddButton = "Dash Dot Dot",
+            MBTNCD_ButtonWidth = 0.5,
+        },
+    })
+    InJoinType = self:AddInput("Join Type", "JoinType", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 2.0,
+        MBTNC_ShowName = false,
+        {
+            MBTNC_AddButton = "Bevel",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        {
+            MBTNC_AddButton = "Round",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+    })
+    self:EndControlNest()
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+    InPoint = self:AddInput("JSON Point", "JSONPoint", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 2,
+    })
+    InEdge = self:AddInput("JSON Edge", "JSONEdge", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 3,
+    })
+    InCurvature = self:AddInput("JSON Curvature", "JSONCurvature", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 4,
+    })
+    InShape = self:AddInput("JSON Custom Shape", "JSONCustomShape", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 5,
+    })
+    InGroups = self:AddInput("JSON Text Groups", "JSONTextGroups", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 6,
+    })
+    InColor = self:AddInput("JSON Custom Color", "JSONCustomColor", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 7,
+    })
+    Output = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InUseColor_Shape then
+        if param.Value == 0.0 then
+            InShape_R:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InShape_G:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InShape_B:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InShape_A:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            InShape_R:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InShape_G:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InShape_B:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InShape_A:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
+    if inp == InUseColor_Dot then
+        if param.Value == 0.0 then
+            InDot_R:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDot_G:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDot_B:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDot_A:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            InDot_R:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDot_G:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDot_B:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDot_A:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
+    if inp == InShowDots then
+        if param.Value == 1.0 then
+            InDotRadius:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDotSides:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InOutlineDots:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InHideDots:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDotsScale:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            InOutlineDots:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotRadius:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotSides:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InHideDots:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotsScale:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
+end
+
+-- ================================================================
+-- ---------- function createPoly Shapes --------------------------
+function createPoly3(sides, r, angle, hideDots)
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Move(0, 0, 0)
+    -- shortcuts for faster access
+    local sin = math.sin
+    local cos = math.cos
+    local sh = Shape()
+    local sh_holder = Shape()
+    local x = cos(angle) * r
+    local y = sin(angle) * r
+    sh:MoveTo(x, y)
+    if hideDots < 0.5 then
+        for i = 1, sides - 1 do
+            x = cos(i / sides * math.pi * 2 + angle) * r
+            y = sin(i / sides * math.pi * 2 + angle) * r
+            sh:LineTo(x, y)
+        end
+        sh:Close()
+        sh_holder:AddShape(sh)
+    end
+    sh_holder = sh_holder:TransformOfShape(mat)
+    return sh_holder
+end
+
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function getSmoothNoise(x, y, seed, scale)
+    scale = math.max(scale, 0.001)
+    
+    -- Boost the base frequency so a scale of 1.0 covers many waves
+    local base_freq = 15.0
+    local sx = (x * base_freq) / scale
+    local sy = (y * base_freq) / scale
+    
+    -- Stronger domain warping for a more chaotic, fluid-like distortion
+    local warpX = math.sin(sy * 0.832 + seed) * 1.5
+    local warpY = math.cos(sx * 0.914 - seed) * 1.5
+    
+    sx = sx + warpX
+    sy = sy + warpY
+    
+    local wave1 = math.sin(sx * 1.61803 + seed) * math.cos(sy * 2.71828 - seed)
+    local wave2 = math.sin(sy * 1.41421 + seed * 1.5) * math.cos(sx * 3.14159)
+    local wave3 = math.sin((sx + sy) * 0.7071 + wave1)
+    
+    -- Sharper, higher-frequency detail layer
+    local wave4 = math.sin(sx * 4.333 - sy * 5.123 + wave2 * 2.0) * 0.8
+    
+    return (wave1 + wave2 + wave3 + wave4) / 3.8
+end
+
+function Process(req)
+    local img = InImage:GetValue(req)
+    local out = img:CopyOf()
+    local array_str_point = InPoint:GetValue(req).Value
+    local array_str_edge = InEdge:GetValue(req).Value
+    local array_str_curvature = InCurvature:GetValue(req).Value
+    local use_curvature_data = (InUseCurvatureData:GetValue(req).Value > 0.5)
+    local array_str_shape = InShape:GetValue(req):GetValue() or {}
+    local array_str_groups = InGroups:GetValue(req):GetValue() or {}
+    local array_str_color = InColor:GetValue(req):GetValue() or {}
+
+    local tbl = {}
+    if array_str_point and array_str_point ~= "" then
+        local inp_point_tbl = jsonutils.decode(array_str_point)
+        if inp_point_tbl ~= nil and type(inp_point_tbl) == "table" then
+            tbl = inp_point_tbl
+            if #tbl == 0 then
+                table.insert(tbl, { 0.5, convertY(0.5, img) })
+            end
+        else
+            table.insert(tbl, { 0.5, convertY(0.5, img) })
+        end
+    else
+        table.insert(tbl, { 0.5, convertY(0.5, img) })
+    end
+    local tbl_Edge = {}
+    if array_str_edge and array_str_edge ~= "" then
+        local inp_edge_tbl = jsonutils.decode(array_str_edge)
+        if inp_edge_tbl ~= nil and type(inp_edge_tbl) == "table" then
+            tbl_Edge = inp_edge_tbl
+        end
+    end
+    local tbl_Curvature = {}
+    if array_str_curvature and array_str_curvature ~= "" then
+        local inp_curvature_tbl = jsonutils.decode(array_str_curvature)
+        if inp_curvature_tbl ~= nil and type(inp_curvature_tbl) == "table" then
+            tbl_Curvature = inp_curvature_tbl
+        end
+    end
+    local tbl_Shape = {}
+    if array_str_shape and array_str_shape ~= "" then
+        local inp_shape_tbl = array_str_shape
+        if inp_shape_tbl ~= nil and type(inp_shape_tbl) == "table" then
+            tbl_Shape = inp_shape_tbl
+        end
+    end
+    local tbl_Groups = {}
+    if array_str_groups and array_str_groups ~= "" then
+        local inp_groups_tbl = array_str_groups
+        if inp_groups_tbl ~= nil and type(inp_groups_tbl) == "table" then
+            tbl_Groups = inp_groups_tbl
+        end
+    end
+    local tbl_Color = {}
+    if array_str_color and array_str_color ~= "" then
+        local inp_color_tbl = array_str_color
+        if inp_color_tbl ~= nil and type(inp_color_tbl) == "table" then
+            tbl_Color = inp_color_tbl
+        end
+    end
+
+    local segmentDot = Shape()
+    local segmentLines = Shape()
+    local segmentCustom = Shape()
+    local segmentCustomBG = Shape()
+    local linetype = math.floor(InLineType:GetValue(req).Value + 0.5) + 1
+    local jointype = math.floor(InJoinType:GetValue(req).Value + 0.5) + 1
+    local line_width = InLineWidth:GetValue(req).Value
+    local curve_data_blend = InCurveDataBlend:GetValue(req).Value
+    local dot_width = InDotLineWidth:GetValue(req).Value
+    local soft_edge = InSoftEdge:GetValue(req).Value
+    local dot_sides = InDotSides:GetValue(req).Value
+    local dot_radius = InDotRadius:GetValue(req).Value
+    local filter = math.floor(InFilter:GetValue(req).Value + 0.5) + 1
+    local line_r = InLine_R:GetValue(req).Value
+    local line_g = InLine_G:GetValue(req).Value
+    local line_b = InLine_B:GetValue(req).Value
+    local line_a = InLine_A:GetValue(req).Value
+    local dot_r = InDot_R:GetValue(req).Value
+    local dot_g = InDot_G:GetValue(req).Value
+    local dot_b = InDot_B:GetValue(req).Value
+    local dot_a = InDot_A:GetValue(req).Value
+    local hideDots = InHideDots:GetValue(req).Value
+    local scaleDots = InDotsScale:GetValue(req).Value
+    local render_outline_lines = InRenderOutline:GetValue(req).Value
+    local shape_Width = InCustomLineWidth:GetValue(req).Value
+    local custom_scale = InCustomScale:GetValue(req).Value
+    local shape_r = InShape_R:GetValue(req).Value
+    local shape_g = InShape_G:GetValue(req).Value
+    local shape_b = InShape_B:GetValue(req).Value
+    local shape_a = InShape_A:GetValue(req).Value
+    local background_Width = InCustomLineWidth_BG:GetValue(req).Value
+    local shape_bg_r = InShape_BG_R:GetValue(req).Value
+    local shape_bg_g = InShape_BG_G:GetValue(req).Value
+    local shape_bg_b = InShape_BG_B:GetValue(req).Value
+    local shape_bg_a = InShape_BG_A:GetValue(req).Value
+    local outline_line_type = {
+        "OLT_Solid",
+        "OLT_Dash",
+        "OLT_Dot",
+        "OLT_DashDot",
+        "OLT_DashDotDot",
+    }
+    local blurfilters = {
+        "BT_Box",
+        "BT_Bartless",
+        "BT_MultiBox",
+        "BT_Gaussian",
+    }
+    local outline_join_type = {
+        "OJT_Bevel",
+        "OJT_Round",
+    }
+    local outline_cap_type = {
+        "OCT_Butt",
+        "OCT_Square",
+        "OCT_Round",
+    }
+    local matCustom = Matrix4()
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Move(0, 0, 0)
+    local ic = ImageChannel(out, 8)
+    local cs = ChannelStyle()
+    local fs = FillStyle()
+    ic:SetStyleFill(fs)
+    -- ================================================================
+    -- ----------  Add Lines ------------------------------------------
+    local shape = Shape()
+    local s_point = {}
+    local e_point = {}
+    local s_id = {}
+    local e_id = {}
+    local s_style = {}
+    local s_edge_index = {}
+    -- ================================================================
+    -- ----------  Add Wireframe ------------------------------------------
+    for key, edge_data in ipairs(tbl_Edge) do
+        if type(edge_data) == "table" and #edge_data >= 2 then
+            -- Grab the exact indices directly. No more polygon loops!
+            local idA = tonumber(edge_data[1])
+            local idB = tonumber(edge_data[2])
+            
+            -- Grab the style (index 3). If it doesn't exist, default to 0
+            local style = tonumber(edge_data[3]) or 0 
+            
+            table.insert(s_id, idA)
+            table.insert(e_id, idB)
+            table.insert(s_style, style)
+
+            table.insert(s_edge_index, key)
+            
+            table.insert(s_point, tbl[idA])
+            table.insert(e_point, tbl[idB])
+        end
+    end
+    -- ================================================================
+    -- ----------  Add UnConnect Lines (With Multigraph Arcs) ---------
+    if InUnConnectLines:GetValue(req).Value > 0.5 then
+        shape:Clear()
+        local curve_amount = InCurveAmount:GetValue(req).Value
+        local curve_steps = InCurveSteps:GetValue(req).Value
+        local curve_bias = InCurveBias:GetValue(req).Value
+        local thickness_factor = InThicknessFactor:GetValue(req).Value
+        local curve_jitter = InCurveJitter:GetValue(req).Value
+        local smooth_seed = InSmoothSeed:GetValue(req).Value
+        local noise_scale = InNoiseScale:GetValue(req).Value
+
+        -- PRE-CALCULATE BEZIER COEFFICIENTS
+        local bezier_coeffs = {}
+        for s = 0, curve_steps do
+            local t = s / curve_steps
+            local omt = 1 - t
+            bezier_coeffs[s] = {
+                c1 = omt * omt,
+                c2 = 2 * omt * t,
+                c3 = t * t
+            }
+        end
+        
+        -- PASS 1: Count total number of distinct edges
+        local edge_totals = {}
+        for i = 1, #e_point do
+            if s_point[i] and e_point[i] and s_point[i][2] ~= nil and e_point[i][2] ~= nil then
+                local idA = s_id[i]
+                local idB = e_id[i]
+                
+                -- Construct the key directly using Point IDs
+                local edgeKey = (idA < idB) and (idA .. "|" .. idB) or (idB .. "|" .. idA)
+                
+                edge_totals[edgeKey] = (edge_totals[edgeKey] or 0) + 1
+            end
+        end
+
+        -- PASS 2: Draw the edges
+        local edge_drawn = {}
+        for i = 1, #e_point do
+            if s_point[i] and e_point[i] and s_point[i][2] ~= nil and e_point[i][2] ~= nil then
+                local x1, y1 = s_point[i][1], s_point[i][2]
+                local x2, y2 = e_point[i][1], e_point[i][2]
+
+                local idA = s_id[i]
+                local idB = e_id[i]
+                
+                local isCanonical = (idA < idB)
+                local edgeKey = isCanonical and (idA .. "|" .. idB) or (idB .. "|" .. idA)
+                
+                edge_drawn[edgeKey] = (edge_drawn[edgeKey] or 0) + 1
+                local k = edge_drawn[edgeKey]
+                local expected_n = edge_totals[edgeKey]
+
+                -- Calculate the midpoint of the edge for the spatial noise
+                local midX = (x1 + x2) * 0.5
+                local midY = (y1 + y2) * 0.5
+                local jitter = getSmoothNoise(midX, midY, smooth_seed, noise_scale) * curve_jitter
+
+                if k <= expected_n then
+                    local cx1, cy1, cx2, cy2, canonical_sign
+                    if isCanonical then
+                        cx1, cy1, cx2, cy2 = x1, y1, x2, y2
+                        canonical_sign = 1
+                    else
+                        cx1, cy1, cx2, cy2 = x2, y2, x1, y1
+                        canonical_sign = -1
+                    end
+
+                    local style = s_style[i] or 0
+                    local line_width = InLineWidth:GetValue(req).Value
+                    
+                    -- NEW: Dynamically calculate passes and spread to prevent gaps!
+                    local passes = 1
+                    local max_spread = 0
+                    
+                    if style == 1 then
+                        local factor = math.max(1.0, thickness_factor)
+                        passes = math.ceil(factor)
+                        max_spread = (factor - 1.0) * line_width
+                    end
+
+                    local orig_edge_idx = s_edge_index[i]
+                    local custom_curve = 0
+                    if use_curvature_data and tbl_Curvature[orig_edge_idx] then
+                        custom_curve = tbl_Curvature[orig_edge_idx]
+                    end
+
+                    local dx = cx2 - cx1
+                    local dy = cy2 - cy1
+                    local len = math.sqrt(dx * dx + dy * dy)
+
+                    if len > 0.0001 then
+                        local nx = -dy / len
+                        local ny = dx / len
+
+                        -- Calculate the curve dynamics
+                        local multiplier = (k - (expected_n + 1) / 2)
+                        local base_offset = ((multiplier * curve_amount) + (curve_bias + custom_curve*curve_data_blend + jitter) * canonical_sign) * len
+
+                        for p = 1, passes do
+                            -- NEW: Evenly distribute the current pass across the max_spread
+                            local thickness_offset = 0
+                            if passes > 1 then
+                                local fraction = (p - 1) / (passes - 1)
+                                thickness_offset = -(max_spread / 2) + (fraction * max_spread)
+                            end
+
+                            -- Shift the anchor points to create parallel tracks
+                            local startX = cx1 + (nx * thickness_offset)
+                            local startY = cy1 + (ny * thickness_offset)
+                            
+                            local endX = cx2 + (nx * thickness_offset)
+                            local endY = cy2 + (ny * thickness_offset)
+
+                            local shape_line = Shape()
+                            shape_line:MoveTo(startX, startY)
+
+                            if math.abs(base_offset) < 0.0001 then
+                                shape_line:LineTo(endX, endY)
+                            else
+                                local total_mid_offset = base_offset + thickness_offset
+                                local midX = (cx1 + cx2) / 2 + (nx * total_mid_offset)
+                                local midY = (cy1 + cy2) / 2 + (ny * total_mid_offset)
+
+                                -- 1. Draw Curve Forwards
+                                for s = 1, curve_steps do
+                                    local c = bezier_coeffs[s]
+                                    local px = c.c1 * startX + c.c2 * midX + c.c3 * endX
+                                    local py = c.c1 * startY + c.c2 * midY + c.c3 * endY
+                                    shape_line:LineTo(px, py)
+                                end
+                                
+                                -- 2. TRICK FUSION: Draw Curve Backwards
+                                for s = curve_steps - 1, 0, -1 do
+                                    local c = bezier_coeffs[s]
+                                    local px = c.c1 * startX + c.c2 * midX + c.c3 * endX
+                                    local py = c.c1 * startY + c.c2 * midY + c.c3 * endY
+                                    shape_line:LineTo(px, py)
+                                end
+                            end
+                            shape:AddShape(shape_line)
+                        end
+                    else
+                        -- Fallback for zero-length lines
+                        local shape_line = Shape()
+                        shape_line:MoveTo(cx1, cy1)
+                        shape_line:LineTo(cx2, cy2)
+                        shape:AddShape(shape_line)
+                    end
+                end
+            end
+        end
+    else
+        for i = 1, #tbl do
+            if tbl[i][2] == nil then
+            else
+                mat:Identity()
+                mat:Move(tbl[i][1], tbl[i][2], 0)
+                shape:LineTo(tbl[i][1], tbl[i][2])
+            end
+        end
+    end
+    -- ================================================================
+    -- ----------  Connect Groups --------------------------------
+    if InConnectGroups:GetValue(req).Value > 0.5 then
+        shape:Clear()
+        mat:Identity()
+        local index = 1 -- starting index in tbl
+        local GroupShapes = Shape()
+        for i, groupSize in ipairs(tbl_Groups) do
+            -- Store the first entry of the group
+            local firstEntry = tbl[index]
+            local shx = Shape()
+            shx:MoveTo(firstEntry[1], firstEntry[2])
+            for j = 1, groupSize do
+                local entry = tbl[index]
+                if entry then
+                    shx:LineTo(entry[1], entry[2])
+                    index = index + 1
+                else
+                    break
+                end
+                GroupShapes:AddShape(shx)
+                shx:Clear()
+            end
+        end
+        shape:AddShape(GroupShapes)
+    end
+    -- ================================================================
+    segmentLines:AddShape(shape)
+    --Render Outline lines
+    if render_outline_lines > 0.5 then
+        segmentLines = segmentLines:OutlineOfShape(
+            line_width,
+            "OLT_Solid",
+            "OJT_Round",
+            8,
+            "SWM_Normal",
+            (req:IsQuick() and 8 or 16)
+        )
+    end
+    -- ================================================================
+    -- ----------  Add Dots -------------------------------------------
+    -- Process each point in the table to create shapes
+    local dotArrayCollection = {}
+    local shapeArrayCollection = {}
+    local shapeBGArrayCollection = {}
+
+    -- PRE-OUTLINE MASTER DOT TEMPLATE (Done once per frame instead of per point)
+    local masterDot = createPoly3(dot_sides, dot_radius, 0, hideDots)
+    if InOutlineDots:GetValue(req).Value > 0.5 then
+        masterDot = masterDot:OutlineOfShape(
+            dot_width,
+            outline_line_type[linetype],
+            outline_join_type[jointype],
+            "OCT_Square",
+            (req:IsQuick() and 8 or 16)
+        )
+    end
+
+    -- PRE-OUTLINE CUSTOM SHAPE TEMPLATES
+    local processedCustomShapes = {}
+    local render_cs_outline = (InRenderCustomOutline:GetValue(req).Value > 0.5)
+    local render_cs_bg_outline = (InRenderCustomOutline_BG:GetValue(req).Value > 0.5)
+    local shape_quality = (req:IsQuick() and 8 or 16)
+
+    for idx, shapeData in ipairs(tbl_Shape) do
+        if type(shapeData) == "table" and shapeData[1] and shapeData[2] then
+            local shBG = Shape()
+            local shFG = Shape()
+            shBG:AddShape(shapeData[1])
+            shFG:AddShape(shapeData[2])
+
+            if render_cs_bg_outline then
+                shBG = shBG:OutlineOfShape(
+                    background_Width, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", shape_quality
+                )
+            end
+            if render_cs_outline then
+                shFG = shFG:OutlineOfShape(
+                    shape_Width, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", shape_quality
+                )
+            end
+
+            processedCustomShapes[idx] = { shBG, shFG }
+        end
+    end
+
+    for i, point in ipairs(tbl) do
+        -- Skip if y coordinate is nil
+        if point[2] == nil then
+            goto continue
+        end
+        -- Create transformation matrix for this point
+        mat:Identity()
+        mat:Scale(scaleDots, scaleDots, 1)
+        mat:Move(point[1], point[2], 0)
+        -- Create Dot and Index shapes
+
+        -- Transform the pre-outlined master dot to this point's coordinates
+        local shapeDot = masterDot:TransformOfShape(mat)
+
+        -- ================================================================
+        segmentDot:AddShape(shapeDot)
+        dotArrayCollection[i] = shapeDot
+        -- Get or create custom shape data
+        if tbl_Shape[1] == nil then
+            goto continue
+        end
+        local shapeData = tbl_Shape[math.min(i, #tbl_Shape)]
+        -- Apply pre-outlined custom shapes
+        if #processedCustomShapes > 0 then
+            local shapeData = processedCustomShapes[math.min(i, #processedCustomShapes)]
+            if shapeData then
+                matCustom:Identity()
+                matCustom:Scale(custom_scale, custom_scale, 1)
+                matCustom:Move(point[1], point[2], 0)
+
+                local shapeCustomBG = shapeData[1]:TransformOfShape(matCustom)
+                local shapeCustom = shapeData[2]:TransformOfShape(matCustom)
+
+                shapeArrayCollection[i] = shapeCustom
+                shapeBGArrayCollection[i] = shapeCustomBG
+                segmentCustom:AddShape(shapeCustom)
+                segmentCustomBG:AddShape(shapeCustomBG)
+            end
+        end
+        ::continue::
+    end
+    -- -- ================================================================
+    -- Render Elements
+    local mat_fin = Matrix4()
+    mat_fin:Identity()
+    -- mat_fin:Move(0.5, convertY(0.5,img), 0). ---Check this
+    segmentDot = segmentDot:TransformOfShape(mat_fin)
+    segmentLines = segmentLines:TransformOfShape(mat_fin)
+    segmentCustomBG = segmentCustomBG:TransformOfShape(mat_fin)
+    segmentCustom = segmentCustom:TransformOfShape(mat_fin)
+    mat:Identity()
+    mat:Move(0, 0, 0)
+    --Add Lines to Image
+    if InShowLines:GetValue(req).Value > 0.5 then
+        cs.Color = Pixel({
+            R = line_r,
+            G = line_g,
+            B = line_b,
+            A = line_a,
+        })
+        ic:ShapeFill(segmentLines:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+    end
+    --Add DOT to Image
+    if InShowDots:GetValue(req).Value > 0.5 then
+        if InUseColor_Dot:GetValue(req).Value == 1 then
+            for i = 1, #tbl_Color do
+                local _dot_1 = Shape()
+                _dot_1 = dotArrayCollection[i]
+                if _dot_1 == nil then
+                else
+                    cs.Color = Pixel({
+                        R = tbl_Color[i].R,
+                        G = tbl_Color[i].G,
+                        B = tbl_Color[i].B,
+                        A = tbl_Color[i].A,
+                    })
+                    ic:ShapeFill(_dot_1)
+                    ic:PutToImage("CM_Merge", cs)
+                end
+            end
+        else
+            cs.Color = Pixel({
+                R = dot_r,
+                G = dot_g,
+                B = dot_b,
+                A = dot_a,
+            })
+            ic:ShapeFill(segmentDot:TransformOfShape(mat))
+            ic:PutToImage("CM_Merge", cs)
+        end
+    end
+    --Add Custom Shape to Image
+    if InShowCustom:GetValue(req).Value > 0.5 then
+        cs.Color = Pixel({
+            R = shape_bg_r,
+            G = shape_bg_g,
+            B = shape_bg_b,
+            A = shape_bg_a,
+        })
+        ic:ShapeFill(segmentCustomBG:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+        if InUseColor_Shape:GetValue(req).Value == 1 then
+            for i = 1, #tbl_Color do
+                local _shape_1 = Shape()
+                _shape_1 = shapeArrayCollection[i]
+                if _shape_1 == nil then
+                else
+                    cs.Color = Pixel({
+                        R = tbl_Color[i].R,
+                        G = tbl_Color[i].G,
+                        B = tbl_Color[i].B,
+                        A = tbl_Color[i].A,
+                    })
+                    ic:ShapeFill(_shape_1)
+                    ic:PutToImage("CM_Merge", cs)
+                end
+            end
+        else
+            cs.Color = Pixel({
+                R = shape_r,
+                G = shape_g,
+                B = shape_b,
+                A = shape_a,
+            })
+            ic:ShapeFill(segmentCustom:TransformOfShape(mat))
+            ic:PutToImage("CM_Merge", cs)
+        end
+    end
+    Output:Set(req, out)
+end
+
+---[[
+-- Handle input disconnection and initialization
+local function resetInputs()
+    InPoint:SetSource(Text(""), 0)
+    InEdge:SetSource(Text(""), 0)
+    InShape:SetSource(ScriptValParam({}), 0)
+    InGroups:SetSource(ScriptValParam({}), 0)
+end
+function OnConnected(src, newsrc, newdst)
+    if newdst == nil then
+        if src == InPoint then
+            InPoint:SetSource(Text(""), 0)
+        elseif src == InEdge then
+            InEdge:SetSource(Text(""), 0)
+        elseif src == InShape then
+            InShape:SetSource(ScriptValParam({}), 0)
+        elseif src == InGroups then
+            InGroups:SetSource(ScriptValParam({}), 0)
+        end
+    end
+    return true
+end
+
+function Save()
+    resetInputs()
+end
+
+function OnAddToFlow()
+    resetInputs()
+end
+
+---]]
