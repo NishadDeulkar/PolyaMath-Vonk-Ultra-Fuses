@@ -5,7 +5,7 @@ local jsonutils = self and require("vjsonutils") or nil
 -- ============================================================================
 -- constants
 -- ============================================================================
-FUSE_NAME = "vJSONIMOP6ShapeRender"
+FUSE_NAME = "vJSONShapeRender"
 DATATYPE = "Image"
 -- ============================================================================
 -- fuse
