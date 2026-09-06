@@ -6,7 +6,7 @@ local jsonutils = self and require("vjsonutils") or nil
 -- ============================================================================
 -- Constants & Registration
 -- ============================================================================
-FUSE_NAME = "vJSONIMOP6ShapeRender_GPU"
+FUSE_NAME = "vJSONShapeRenderGPU"
 DATATYPE = "Image"
 
 FuRegisterClass(FUSE_NAME, CT_Tool, {
