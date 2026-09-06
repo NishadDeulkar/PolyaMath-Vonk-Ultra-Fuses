@@ -1,0 +1,90 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONEdgeShortestDist"
+DATATYPE = "Text"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\Edges",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Edges with the shortest distance (plus epsilon) are connected",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+})
+
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;">[ vJSONUnPacker ]  → </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → [ vJSONShapeRender (Edge Data) ]</td>
+  </tr>
+</table>
+]]
+
+function Create()
+    -- [[ Creates the user interface. ]]
+    InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InThreshold = self:AddInput("Threshold", "Threshold", {
+		LINKID_DataType = "Number",
+		INPID_InputControl = "SliderControl",
+		INP_MinScale = 0.0,
+		INP_MaxScale = 2.0,
+		INP_Default = 1,
+
+    })
+
+    InArray = self:AddInput("Array A", "ArrayA", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        LINK_Main = 1,
+
+    })
+
+    OutDataEdges = self:AddOutput("Output Edges", "OutputEdges", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+
+    })
+end
+
+function Process(req)
+    local arr = jsonutils.decode(InArray:GetValue(req).Value)
+    local threshold = InThreshold:GetValue(req).Value
+
+    local result = {}
+
+    local minDist = ((arr[4]-arr[7])^2 + (arr[5]-arr[8])^2 + (arr[6]-arr[9])^2)^0.5
+
+    for i = 1, #arr - 3, 3 do
+        for j = i + 3, #arr, 3 do
+            dist = ((arr[i]-arr[j])^2 + (arr[i+1]-arr[j+1])^2 + (arr[i+2]-arr[j+2])^2)^0.5 
+            if dist <= minDist*threshold then
+                table.insert(result, {(i+2)/3, (j+2)/3})
+            end
+        end
+    end
+
+    OutDataEdges:Set(req, Text(jsonutils.encode(result)))
+end

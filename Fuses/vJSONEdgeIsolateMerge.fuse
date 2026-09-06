@@ -1,0 +1,131 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONIsolateEdgesMerge"
+DATATYPE = "Text"
+MAX_INPUTS = 64
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\Edges",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Generates edges for multiple arrays (edges only between consecutive points in each array).",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.MultiMerge",
+})
+
+function Create()
+    -- Label input
+    InConnectionLabel = self:AddInput("Edges Fuse", "ConnectionLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    -- Input count slider
+    InWhich = self:AddInput("Which", "Which", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = MAX_INPUTS,
+        INP_MaxScale = 1,
+        INP_Integer = true,
+        IC_Steps = 1.0,
+        IC_Visible = false
+    })
+
+    -- First array input
+    InArray1 = self:AddInput("Array1", "Array1", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1,
+        INP_Required = false
+    })
+
+    -- Output
+    OutDataEdges = self:AddOutput("Output Edges", "OutputEdges", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1
+    })
+end
+
+function OnAddToFlow()
+    local highest_input = 0
+
+    for i = 1, MAX_INPUTS do
+        local input = self:FindInput("Array" .. tostring(i))
+        if input == nil then break end
+        highest_input = i
+    end
+
+    for i = 2, highest_input do
+        self:AddInput("Array" .. i, "Array" .. i, {
+            LINKID_DataType = DATATYPE,
+            LINK_Main = i,
+            INP_Required = false,
+            INP_DoNotifyChanged = true
+        })
+    end
+
+    InWhich:SetAttrs({ INP_MaxScale = highest_input, INP_MaxAllowed = highest_input })
+end
+
+function OnConnected(inp, old, new)
+    local inp_nr = tonumber(string.match(inp:GetAttr("LINKS_Name"), "Array(%d+)"))
+    local max_nr = tonumber(InWhich:GetAttr("INP_MaxAllowed"))
+
+    if inp_nr then
+        if inp_nr >= max_nr and max_nr < MAX_INPUTS and new ~= nil then
+            InWhich:SetAttrs({ INP_MaxScale = inp_nr, INP_MaxAllowed = inp_nr })
+            self:AddInput("Array" .. (inp_nr + 1), "Array" .. (inp_nr + 1), {
+                LINKID_DataType = DATATYPE,
+                LINK_Main = (inp_nr + 1),
+                INP_Required = false,
+                INP_DoNotifyChanged = true
+            })
+        end
+    end
+end
+
+-- ============================================================================
+-- Process function
+-- ============================================================================
+function Process(req)
+    local input_count = tonumber(InWhich:GetAttr("INP_MaxAllowed")) or 0
+    local values_tbl = {}
+    local result_edges = {}
+    local cumulative_index = 0
+
+    -- Load all arrays
+    for i = 1, input_count do
+        local input = self:FindInput("Array" .. i)
+        if input and input:GetSource(req.Time, req:GetFlags()) then
+            local arr = jsonutils.decode(input:GetSource(req.Time, req:GetFlags()).Value) or {}
+            table.insert(values_tbl, arr)
+
+            -- Generate edges for consecutive points in this array
+            for j = 1, #arr - 1 do
+                table.insert(result_edges, { cumulative_index + j, cumulative_index + j + 1 })
+            end
+
+            cumulative_index = cumulative_index + #arr
+        end
+    end
+
+    -- Output JSON string
+    OutDataEdges:Set(req, Text(jsonutils.encode(result_edges)))
+end

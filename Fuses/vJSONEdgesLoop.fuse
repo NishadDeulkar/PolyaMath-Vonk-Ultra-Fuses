@@ -1,0 +1,54 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONEdgesLoop"
+DATATYPE = "Text"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\Edges",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Generates loop of edges.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.MultiMerge",
+})
+
+function Create()
+    -- First array input
+    InArray = self:AddInput("Array1", "Array1", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1,
+        INP_Required = true
+    })
+
+    -- Output
+    OutDataEdges = self:AddOutput("Output Edges", "OutputEdges", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1
+    })
+end
+
+function Process(req)
+    local result_edges = {}
+    local arr = jsonutils.decode(InArray:GetValue(req).Value)
+
+    -- Generate edges for consecutive points in this array
+    for j = 1, #arr - 1 do
+        table.insert(result_edges, { j, j + 1 })
+    end
+
+    table.insert(result_edges, { 1, #arr })
+
+    -- Output JSON string
+    OutDataEdges:Set(req, Text(jsonutils.encode(result_edges)))
+end
