@@ -1,0 +1,265 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONInterpolate"
+DATATYPE = "Text"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\Modify",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Interpolate between corresponding values in two arrays.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+})
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;">[ vJSON - XYZ]  → </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → [ vJSON Node ]</td>
+  </tr>
+</table>
+]]
+function Create()
+    -- [[ Creates the user interface. ]]
+    InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InProgress = self:AddInput("Progress", "progress", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 1,
+        LINK_Main = 3,
+        LINK_Visible = false,
+    })
+
+    InSelectEase = self:AddInput("Select Easing", "selectEasing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        { MBTNC_AddButton = "linear",        MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeInQuad",    MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeOutQuad",   MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeInOutQuad", MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeInExpo",    MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeOutExpo",   MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "easeInOutExpo", MBTNCD_ButtonWidth = 1 / 2, },
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+    })
+
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+
+    InArray1 = self:AddInput("Array A", "ArrayA", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        LINK_Main = 1,
+
+    })
+
+    InArray2 = self:AddInput("Array B", "ArrayB", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        LINK_Main = 2,
+    })
+
+    OutData = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    --[[
+        Handles all input control events.
+
+        :param inp: Input that triggered a signal.
+        :type inp: Input
+
+        :param param: Parameter object holding the (new) value.
+        :type param: Parameter
+
+        :param time: Current frame number.
+        :type time: float
+    ]]
+    if inp == InShowInput then
+        if param.Value == 1.0 then
+            InProgress:SetAttrs({ LINK_Visible = true })
+        else
+            InProgress:SetAttrs({ LINK_Visible = false })
+        end
+    end
+end
+
+function linear(t)
+    return t
+end
+
+function easeInQuad(t)
+    return t * t
+end
+
+function easeOutQuad(t)
+    return t * (2 - t)
+end
+
+function easeOutExpo(t)
+    return (t == 1) and 1 or 1 - math.pow(2, -10 * t)
+end
+
+function easeInExpo(t)
+    return (t == 0) and 0 or math.pow(2, 10 * (t - 1))
+end
+
+function easeInOutExpo(t)
+    if t == 0 then return 0 end
+    if t == 1 then return 1 end
+    t = t * 2
+    if t < 1 then
+        return 0.5 * math.pow(2, 10 * (t - 1))
+    else
+        return 0.5 * (-math.pow(2, -10 * (t - 1)) + 2)
+    end
+end
+
+function easeInOutQuad(t)
+    t = t * 2
+    if t < 1 then
+        return 0.5 * t * t
+    else
+        return -0.5 * ((t - 1) * (t - 3) - 1)
+    end
+end
+
+-- Match Array lengths - add zeros
+function adjustArrays_zeros(arr1, arr2)
+    local maxLen = math.max(#arr1, #arr2)
+    for i = 1, maxLen do
+        arr1[i], arr2[i] = arr1[i] or 0, arr2[i] or 0
+    end
+    return arr1, arr2
+end
+
+---- Match Array lengths - trim
+function adjustArrays_trim(arr1, arr2)
+    local len1, len2 = #arr1, #arr2
+    local minLen = math.min(len1, len2)
+    for i = minLen + 1, len1 do
+        arr1[i] = {0,0,0}
+    end
+    for i = minLen + 1, len2 do
+        arr2[i] = {0,0,0}
+    end
+    return arr1, arr2
+end
+
+function adjustArrays_loop(arr1, arr2)
+    local len1, len2 = #arr1, #arr2
+
+    if len1 == 0 or len2 == 0 then
+        return arr1, arr2
+    end
+
+    if len1 <= len2 then
+        for i = 1, len2 do
+            arr1[i] = arr1[((i - 1) % len1) + 1]
+        end
+    else
+        for i = 1, len1 do
+            arr2[i] = arr2[((i - 1) % len2) + 1]
+        end
+    end
+    return arr1, arr2
+end
+
+function interpolateArrays(array1, array2, progress, easingFunction)
+    local function interpolateValues(value1, value2, progress)
+        return value1 + (value2 - value1) * progress
+    end
+
+    local function interpolateArray(array1, array2, progress)
+        local interpolated = {}
+
+        for i = 1, #array1 do
+            if type(array1[i]) == "table" then
+                interpolated[i] = interpolateArray(array1[i], array2[i], progress)
+            else
+                local t = easingFunction(progress)
+                interpolated[i] = interpolateValues(array1[i], array2[i], t)
+            end
+        end
+
+        return interpolated
+    end
+
+    if type(array1) == "table" and type(array2) == "table" then
+        local interpolatedArray = interpolateArray(array1, array2, progress)
+        return interpolatedArray
+    else
+        return nil -- or handle error condition appropriately
+    end
+end
+
+function Process(req)
+    local progress = InProgress:GetValue(req).Value
+    local arrayA   = jsonutils.decode(InArray1:GetValue(req).Value)
+    local arrayB   = jsonutils.decode(InArray2:GetValue(req).Value)
+
+
+    if arrayA == nil or arrayB == nil then
+        --print( "Connect Second Array")
+    else
+        -- Matct Array lengths
+            arrayA, arrayB = adjustArrays_loop(arrayA, arrayB)
+      
+
+        local easetypes = {
+            linear,
+            easeInQuad,
+            easeOutQuad,
+            easeInOutQuad,
+            easeInExpo,
+            easeOutExpo,
+            easeInOutExpo }
+
+
+        local result       = interpolateArrays(arrayA, arrayB, progress,
+            easetypes[math.floor(InSelectEase:GetValue(req).Value + 0.5) + 1])
+
+        local json_str_out = jsonutils.encode(result)
+
+        OutData:Set(req, Text(json_str_out))
+    end
+end
+
