@@ -1,0 +1,147 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONShearX"
+DATATYPE = "Text"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\JSON\\Modify",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Shears array positions in X direction",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+})
+
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;">[ vJSONUnPacker ]  → </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → [ vJSONPacker ]</td>
+  </tr>
+</table>
+]]
+
+
+function Create()
+    InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    self:BeginControlNest("Shear", "Shear", true, { LBLC_PickButton = false })
+    ShearParY = self:AddInput("Shear Parallel Y", "ShearPar.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false
+    })
+
+    ShearParZ = self:AddInput("Shear Parallel Z", "ShearPar.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false
+    })
+    self:EndControlNest()
+
+
+    self:BeginControlNest("Center", "Center", true, { LBLC_PickButton = false })
+    CenterY = self:AddInput("Center Y", "Center.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false
+    })
+
+    CenterZ = self:AddInput("Center Z", "Center.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false
+    })
+    self:EndControlNest()
+
+
+    self:BeginControlNest("Scale", "Scale", true, { LBLC_PickButton = false })
+    ScaleX = self:AddInput("X Scale", "Scale.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false,
+        INP_Default = 1.0
+    })
+
+    ScaleY = self:AddInput("Y Scale", "Scale.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false,
+        INP_Default = 1.0
+    })
+
+    ScaleZ = self:AddInput("Z Scale", "Scale.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        LINK_Visible = false,
+        INP_Default = 1.0
+    })
+    self:EndControlNest()
+
+
+    -- First array input
+    InArray = self:AddInput("Array1", "Array1", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1,
+        INP_Required = true
+    })
+
+    -- Output
+    OutData = self:AddOutput("Output", "Output", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1
+    })
+end
+
+
+function Process(req)
+    local arr = jsonutils.decode(InArray:GetValue(req).Value)
+
+    local sY = ShearParY:GetValue(req).Value
+    local sZ = ShearParZ:GetValue(req).Value
+    local cY = CenterY:GetValue(req).Value
+    local cZ = CenterZ:GetValue(req).Value
+    
+    local scaleX = ScaleX:GetValue(req).Value
+    local scaleY = ScaleY:GetValue(req).Value
+    local scaleZ = ScaleZ:GetValue(req).Value
+
+    local result = {}
+
+    for i = 1 , #arr, 3 do
+        result[i] = arr[i]*scaleX + sY*(arr[i+1]-cY) + sZ*(arr[i+2]-cZ)
+        result[i+1] = scaleY*arr[i+1]
+        result[i+2] = scaleZ*arr[i+2]
+    end
+
+    local json_str_out = jsonutils.encode(result)
+    OutData:Set(req, Text(json_str_out))
+end
+
