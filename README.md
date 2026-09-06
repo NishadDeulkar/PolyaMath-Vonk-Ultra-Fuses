@@ -72,11 +72,11 @@ Forks of existing Vonk nodes with changed or added behaviour. These are GPL v3 -
 
 ## Installation
 
-Download the latest [release](https://github.com/{{user}}/{{repo}}/releases) or clone this repo, then copy the `.fuse` files into your Resolve `Fuses` folder:
+Download the latest **[release](https://github.com/NishadDeulkar/PolyaMath-Vonk-Ultra-Fuses/archive/refs/heads/main.zip)** or clone this repo, then copy the `.fuse` files into your Resolve `Fuses` folder:
 
 | OS | Path |
 |---|---|
-| Windows | `%APPDATA%\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses` |
+| Windows | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses` |
 | macOS | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Fuses` |
 | Linux | `~/.local/share/DaVinciResolve/Fusion/Fuses` |
 
