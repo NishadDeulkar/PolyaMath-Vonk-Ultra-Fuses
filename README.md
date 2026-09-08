@@ -66,7 +66,7 @@ Forks of existing Vonk nodes with changed or added behaviour. These are GPL v3 -
 ## Requirements
 
 - **DaVinci Resolve 19+ (free version)** - developed and tested on Windows using free Resolve only. Should work in Resolve Studio and Fusion Studio, but I can't verify that.
-- **[Vonk Ultra](https://kartaverse.github.io/) v2 or newer**, installed via the Reactor package manager.
+- **[Vonk Ultra](https://kartaverse.github.io/)**, installed via the Reactor package manager.
 
 ---
 
